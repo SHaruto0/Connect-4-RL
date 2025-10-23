@@ -14,6 +14,16 @@ class Connect4:
             -1: "AI"
         }
 
+        self.rewards = {
+            "continue": 0,
+            "illegal": -1,
+            "win": 1,
+            "tie": 0.5,
+            "loss": -1,
+            "reach": 0.1,
+            "block": 0.1
+        }
+
         self.Q_model = agent
         
     def play(self):
@@ -100,17 +110,11 @@ class Connect4:
 
         # self.print_board()
         if column is not None:
-            p, win = self.check_win(row, column)
+            result, done = self.check_win(row, column)
+            # check_reach
+            # check_block
 
-            if win and p == 1:
-                reward = 1
-                done = True
-            elif win and p == -1:
-                reward = -1
-                done = True
-            elif win and p == 0:
-                reward = 0.5
-                done = True
+            reward = self.rewards[result]
 
             self.current_player *= -1
 
@@ -158,10 +162,10 @@ class Connect4:
         
         return row, True
     
-    def check_win(self, row: int, column: int) -> tuple[int, bool]:
+    def check_win(self, row: int, column: int) -> tuple[int, str, bool]:
         player = self.board[row][column]
         if player == 0:
-            return 0, False
+            return "illegal", False
 
         directions = [
             (0, 1),  # horizontal
@@ -169,7 +173,6 @@ class Connect4:
             (1, 1),  # diagonal down-right
             (1, -1)  # diagonal down-left
         ]
-
 
         for dr, dc in directions:
             count = 1
@@ -188,12 +191,20 @@ class Connect4:
                 r -= dr
                 c -= dc
 
-            if count >= 4:
-                return self.current_player, True
+            if count >= 4 and self.current_player == 1:
+                return "win", True
+            elif count >= 4 and self.current_player == -1:
+                return "loss", True
         
         if np.sum(self.get_non_empty_column()) == 0:
-            return 0, True
-        return 0, False
+            return "tie", True
+        return "continue", False
+
+    def check_reach(self, row: int, colum: int) -> tuple[int, bool]:
+        pass
+
+    def check_block(self, row: int, colum: int) -> tuple[int, bool]:
+        pass
     
     def get_non_empty_column(self) -> list[int]:
         return (self.board[0] == 0).astype(int)
