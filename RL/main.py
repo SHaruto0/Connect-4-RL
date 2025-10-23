@@ -33,7 +33,7 @@ def train(trial, stage_cfg):
     saveas = stage_cfg["saveas"]
 
     if mode == "selfplay":
-        model_path = stage_cfg["model_path"]
+        model_path = f"models/{trial}_{stage_cfg["model_path"]}"
         past_agent = DQN(input_dim=2*6*7, fc1_dim=256, fc2_dim=256, n_action=7)
         past_agent.load_state_dict(torch.load(model_path))
 
@@ -55,10 +55,10 @@ def train(trial, stage_cfg):
         obs = env.reset()
 
         while not done:
-            # print(obs)
+            # env.print_board()
             action = agent.choose_action(obs, env.get_non_empty_column())
-            # print(action)
             obs_, reward, done = env.step(action)
+            print(reward)
             score += reward
             agent.store_memory(obs, action, reward, done, obs_)
             agent.learn()
@@ -68,8 +68,6 @@ def train(trial, stage_cfg):
 
         if reward == 1:
             results.append(1)
-        # elif reward == 0.5:
-        #     results.append(0.5)
         else:
             results.append(0)
 
@@ -95,7 +93,12 @@ def train(trial, stage_cfg):
 
         iteration += 1
 
-    agent.save_model(saveas)
+        if iteration == 1:
+            break
+    
+    # env.print_board()
+
+    agent.save_model(f"models/{trial}_{saveas}")
     print(f"Finished Stage {stage}. Saved model!!")
 
 if __name__ == "__main__":
