@@ -54,7 +54,7 @@ class Connect4:
                     row, placed = self.place(self.current_player, column)
                     column = column if placed else None
             
-            if self.current_player == -1:
+            if self.current_player == -1 and self.Q_model is not None:
                 with torch.no_grad():
                     obs = torch.tensor([self.get_board_state()], dtype=torch.float32, device=self.Q_model.device)
                     q_val = self.Q_model(obs).squeeze(0)  # shape (7,)
@@ -65,15 +65,20 @@ class Connect4:
                     column = torch.argmax(q_val).item()
                 row, placed = self.place(self.current_player, column)
                 column = column if placed else None
+            elif self.current_player == -1:
+                column = np.random.choice(np.where(game.get_non_empty_column() == 1)[0])
+                row, placed = self.place(self.current_player, column)
+                column = column if placed else None
+
 
             if column is not None:
-                p, win = self.check_win(row, column)
+                result, done = self.check_win(row, column)
 
-                if win and p == 0:
+                if done and result == "tie":
                     print(f"TIE!")
                     self.game_on = False
-                elif win:
-                    print(f"{self.player_name[p]} won!")
+                elif done:
+                    print(f"{self.player_name[self.current_player]} won!")
                     self.game_on = False
 
                 self.current_player *= -1
@@ -111,8 +116,11 @@ class Connect4:
         # self.print_board()
         if column is not None:
             result, done = self.check_win(row, column)
-            # check_reach
-            # check_block
+
+            if not done:
+                result, is_reach = self.check_reach(row, column)
+
+            print(result)
 
             reward = self.rewards[result]
 
@@ -162,7 +170,7 @@ class Connect4:
         
         return row, True
     
-    def check_win(self, row: int, column: int) -> tuple[int, str, bool]:
+    def check_win(self, row: int, column: int) -> tuple[str, bool]:
         player = self.board[row][column]
         if player == 0:
             return "illegal", False
@@ -200,8 +208,37 @@ class Connect4:
             return "tie", True
         return "continue", False
 
-    def check_reach(self, row: int, colum: int) -> tuple[int, bool]:
-        pass
+    def check_reach(self, row: int, column: int) -> tuple[str, bool]:
+        player = self.board[row][column]
+        if player == 0:
+            return "illegal", False
+
+        directions = [
+            (0, 1),   # horizontal
+            (1, 0),   # vertical
+            (1, 1),   # diagonal down-right
+            (1, -1)   # diagonal down-left
+        ]
+
+        for dr, dc in directions:
+            line = []
+            for i in range(-3, 4):
+                r, c = row + dr * i, column + dc * i
+                if 0 <= r < 6 and 0 <= c < 7:
+                    line.append(self.board[r][c])
+                else:
+                    line.append(None)
+
+            # Check every window of 4
+            for i in range(len(line) - 3):
+                window = line[i:i + 4]
+                if None in window:
+                    continue
+                if window.count(player) == 3 and window.count(0) == 1:
+                    return "reach", True
+
+        return "continue", False
+
 
     def check_block(self, row: int, colum: int) -> tuple[int, bool]:
         pass
