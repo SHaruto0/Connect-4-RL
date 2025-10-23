@@ -66,10 +66,13 @@ class Connect4:
                 row, placed = self.place(self.current_player, column)
                 column = column if placed else None
             elif self.current_player == -1:
-                column = np.random.choice(np.where(game.get_non_empty_column() == 1)[0])
-                row, placed = self.place(self.current_player, column)
-                column = column if placed else None
-
+                column = None
+                while column is None:
+                    temp = int(input("Placed: "))
+                    column = temp if 0 <= temp and temp <= 6 else None
+            
+                    row, placed = self.place(self.current_player, column)
+                    column = column if placed else None
 
             if column is not None:
                 result, done = self.check_win(row, column)
@@ -113,27 +116,29 @@ class Connect4:
             row, placed = self.place(self.current_player, column)
             column = column if placed else None
 
+        if column is None:
+            print("Invalid move attempted.")
+            return self.get_board_state(), self.rewards["invalid"], True
+
         # self.print_board()
-        if column is not None:
-            result, done = self.check_win(row, column)
+        result, done = self.check_win(row, column)
+        reward = self.rewards[result]
 
-            if not done:
-                result, is_reach = self.check_reach(row, column)
+        if not done:
+            result, is_reach = self.check_reach(row, column)
+            reward += self.rewards[result]
 
-            print(result)
+            result, is_block = self.check_block(row, column)
+            reward += self.rewards[result]
 
-            reward = self.rewards[result]
+        self.current_player *= -1
 
-            self.current_player *= -1
-
-            if not done and ai:
-                board, reward, done = self.step(-1, False)
-                return board, reward, done
-            else:
-                return self.get_board_state(), reward, done
+        if not done and ai:
+            board, ai_reward, done = self.step(-1, False)
+            reward -= ai_reward
+            return board, reward, done
         else:
-            print(column)
-            print("HIHIHI")
+            return self.get_board_state(), reward, done
 
     def reset(self) -> list[int]:
         self.board = np.zeros((6,7), dtype=np.int8)
@@ -240,9 +245,46 @@ class Connect4:
         return "continue", False
 
 
-    def check_block(self, row: int, colum: int) -> tuple[int, bool]:
-        pass
-    
+    def check_block(self, row: int, column: int) -> tuple[str, bool]:
+        player = self.board[row][column]
+        if player == 0:
+            return "illegal", False
+
+        opponent = -player
+        directions = [
+            (0, 1),   # horizontal
+            (1, 0),   # vertical
+            (1, 1),   # diagonal down-right
+            (1, -1)   # diagonal down-left
+        ]
+
+        for dr, dc in directions:
+            line = []
+            coords = []  # store coordinates for each cell in the line
+            for i in range(-3, 4):  # check up to 3 cells away in both directions
+                r, c = row + dr * i, column + dc * i
+                if 0 <= r < 6 and 0 <= c < 7:
+                    line.append(self.board[r][c])
+                    coords.append((r, c))
+                else:
+                    line.append(None)
+                    coords.append(None)
+
+            # Slide a window of 4 cells along that line
+            for i in range(len(line) - 3):
+                window = line[i:i + 4]
+                positions = coords[i:i + 4]
+                if None in window:
+                    continue
+
+                if window.count(opponent) == 3 and window.count(player) == 1:
+                    empty_index = window.index(player)
+                    if positions[empty_index] == (row, column):
+                        return "block", True
+
+        return "continue", False
+
+
     def get_non_empty_column(self) -> list[int]:
         return (self.board[0] == 0).astype(int)
     
