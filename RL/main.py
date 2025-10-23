@@ -34,7 +34,7 @@ def train(trial, stage_cfg):
 
     if mode == "selfplay":
         model_path = stage_cfg["model_path"]
-        past_agent = DQN(input_dim=2*6*7, fc1_dim=256, fc2_dim=256, fc3_dim=256, n_action=7)
+        past_agent = DQN(input_dim=2*6*7, fc1_dim=256, fc2_dim=256, n_action=7)
         past_agent.load_state_dict(torch.load(model_path))
 
         env = Connect4(mode=mode, agent=past_agent)
@@ -99,7 +99,7 @@ def train(trial, stage_cfg):
     print(f"Finished Stage {stage}. Saved model!!")
 
 if __name__ == "__main__":
-    trial = 1
+    trial = 2
 
     manager = CurriculumManager("curriculum_config.json")
 

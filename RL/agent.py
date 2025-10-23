@@ -23,8 +23,8 @@ class Agent:
         self.action_space = [i for i in range(n_action)]
 
         # DDQN
-        self.Q_eval = DQN(input_dim, fc1_dim, fc2_dim, fc3_dim, n_action)
-        self.Q_target = DQN(input_dim, fc1_dim, fc2_dim, fc3_dim, n_action)
+        self.Q_eval = DQN(input_dim, fc1_dim, fc2_dim, n_action)
+        self.Q_target = DQN(input_dim, fc1_dim, fc2_dim, n_action)
         self.Q_target.load_state_dict(self.Q_eval.state_dict())
         self.Q_target.eval()
 
