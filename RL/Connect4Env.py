@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 class Connect4:
-    def __init__(self, mode, agent=None, seed=42):
+    def __init__(self, mode=None, agent=None, seed=42):
         np.random.seed(seed=seed)
         self.mode = mode
 
@@ -19,6 +19,9 @@ class Connect4:
     def play(self):
         self.game_on = True
         self.board = np.zeros((6,7), dtype=np.int8)
+
+        if self.Q_model is None:
+            ValueError("Q Model Needed!!")
 
         print("Welcome to Connect 4!\n")
         while self.current_player is None:
@@ -40,30 +43,39 @@ class Connect4:
             
                     row, placed = self.place(self.current_player, column)
                     column = column if placed else None
-            elif self.current_player == -1: # REPLACE WITH RL
-                column = None
-                while column is None:
-                    temp = int(input("Placed: "))
-                    column = temp if 0 <= temp and temp <= 6 else None
             
-                    row, placed = self.place(self.current_player, column)
-                    column = column if placed else None
+            if self.current_player == -1:
+                with torch.no_grad():
+                    obs = torch.tensor([self.get_board_state()], dtype=torch.float32, device=self.Q_model.device)
+                    q_val = self.Q_model(obs).squeeze(0)  # shape (7,)
 
-            p, win = self.check_win(row, column)
+                    mask = torch.tensor(self.get_non_empty_column(), dtype=torch.bool, device=self.Q_model.device)
+                    q_val[~mask] = -float('inf')
 
-            if win and p == 0:
-                print(f"TIE!")
-                self.game_on = False
-            elif win:
-                print(f"{self.player_name[p]} won!")
-                self.game_on = False
+                    column = torch.argmax(q_val).item()
+                row, placed = self.place(self.current_player, column)
+                column = column if placed else None
 
-            self.current_player *= -1
+            if column is not None:
+                p, win = self.check_win(row, column)
+
+                if win and p == 0:
+                    print(f"TIE!")
+                    self.game_on = False
+                elif win:
+                    print(f"{self.player_name[p]} won!")
+                    self.game_on = False
+
+                self.current_player *= -1
     
     def step(self, column, ai=True):
         reward = 0
         done = False
-
+        
+        if self.mode is None:
+            print("Q Model Needed!!")
+            raise ValueError("Q Model Needed!!")
+        
         if self.current_player == 1:
             row, placed = self.place(self.current_player, column)
             column = column if placed else None
@@ -73,7 +85,7 @@ class Connect4:
             row, placed = self.place(self.current_player, column)
             column = column if placed else None
 
-        elif self.current_player == -1 and self.mode == "selfplay": # REPLACE WITH CURRICULUM
+        elif self.current_player == -1 and self.mode == "selfplay":
             with torch.no_grad():
                 obs = torch.tensor([self.get_board_state()], dtype=torch.float32, device=self.Q_model.device)
                 q_val = self.Q_model(obs).squeeze(0)  # shape (7,)
@@ -82,7 +94,6 @@ class Connect4:
                 q_val[~mask] = -float('inf')
 
                 column = torch.argmax(q_val).item()
-
 
             row, placed = self.place(self.current_player, column)
             column = column if placed else None
@@ -210,41 +221,4 @@ class Connect4:
 if __name__ == "__main__":
     game = Connect4(mode="random")
 
-    # state = game.reset()
-    # game.print_board()
-    # game.step(2)
-    # print(game.get_non_empty_column())
-    # # game.step(3)
-    # # game.step(2)
-    # # game.step(3)
-    # # game.step(2)
-    # # game.step(3)
-    # # game.step(2)
-    # # game.step(3)
-    # # game.step(2)
-    # # game.step(3)
-    # # game.step(4)
-    # # game.step(4)
-    # # game.step(4)
-    # # game.step(4)
-    # # game.step(4)
-    # # game.step(4)
-    # # game.step(4)
-    # game.print_board()
-
-    # print(np.where(game.get_non_empty_column() == 1)[0].tolist())
-
     game.play()
-    # game.place(1, 4)
-    # game.place(-1, 3)
-    # game.place(1, 3)
-    # game.place(-1, 2)
-    # game.place(-1, 2)
-    # game.place(1, 2)
-    # game.place(-1, 1)
-    # game.place(-1, 1)
-    # game.place(-1, 1)
-    # game.place(1, 1)
-
-    # game.print_board()
-    # print(game.get_board_state())
