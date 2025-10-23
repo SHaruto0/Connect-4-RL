@@ -7,20 +7,25 @@ import matplotlib.pyplot as plt
 from model import DQN
 
 class Agent:
-    def __init__(self, input_dim, n_action, lr=0.001, batch_size=64, eps=1.0, min_eps=0.01, gamma=0.99, fc1_dim=256, fc2_dim=256, fc3_dim=256,
-                 mem_size=5000, eps_dec=0.0001):
+    def __init__(self, input_dim, n_action, lr=0.001, batch_size=64, eps=1.0, min_eps=0.01, gamma=0.99, 
+                 fc1_dim=256, fc2_dim=256, fc3_dim=256, mem_size=5000, eps_dec=0.0001, target_update_freq=1000):
         self.lr = lr
         self.batch_size = batch_size
         self.eps = eps
         self.eps_dec = eps_dec
         self.min_eps = min_eps
         self.gamma = gamma
+        self.target_update_freq = target_update_freq
 
         self.mem_size = mem_size
         self.mem_counter = 0
+        self.learn_step_counter = 0
         self.action_space = [i for i in range(n_action)]
 
         self.Q_eval = DQN(input_dim, fc1_dim, fc2_dim, fc3_dim, n_action)
+        self.Q_target = DQN(input_dim, fc1_dim, fc2_dim, fc3_dim, n_action)
+        self.Q_target.load_state_dict(self.Q_eval.state_dict())
+        self.Q_target.eval()
 
         self.optimizer = torch.optim.Adam(self.Q_eval.parameters(), lr=self.lr)
         self.criterion = nn.MSELoss()
@@ -76,15 +81,26 @@ class Agent:
         action_batch = self.action_memory[batch]
 
         q_curr = self.Q_eval(state_batch)[batch_index,action_batch]
-        q_pred = self.Q_eval(next_state_batch)
-        q_pred[terminal_batch] = 0.0
 
-        q_target = reward_batch + self.gamma * torch.max(q_pred, dim=1)[0]
+        # DDQN
+        with torch.no_grad():
+            # main network selects the best actions for next state
+            next_actions = torch.argmax(self.Q_eval(next_state_batch), dim=1)
+            # target network evaluates them
+            q_next = self.Q_target(next_state_batch)[batch_index, next_actions]
+            q_next[terminal_batch] = 0.0
+
+        q_target = reward_batch + self.gamma * q_next
 
         loss = self.criterion(q_curr, q_target).to(self.Q_eval.device)
         self.loss_history.append(loss.item())
         loss.backward()
         self.optimizer.step()
+
+        # Periodically update target network
+        self.learn_step_counter += 1
+        if self.learn_step_counter % self.target_update_freq == 0:
+            self.Q_target.load_state_dict(self.Q_eval.state_dict())
 
         self.eps = self.eps - self.eps_dec if self.eps > self.min_eps else self.min_eps
 
