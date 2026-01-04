@@ -7,14 +7,16 @@ import matplotlib.pyplot as plt
 from model import DQN
 
 class Agent:
-    def __init__(self, input_dim, n_action, lr=0.001, batch_size=64, eps=1.0, min_eps=0.01, gamma=0.99, 
-                 fc1_dim=128, fc2_dim=128, fc3_dim=100, mem_size=50000, eps_dec=0.00001 ):
+    def __init__(self, input_dim, n_action, lr=0.001, batch_size=64, eps=1.0, min_eps=0.05, gamma=0.99, 
+                 fc1_dim=128, fc2_dim=128, fc3_dim=100, mem_size=50000, eps_dec=0.00001, 
+                 target_update_freq=500):
         self.lr = lr
         self.batch_size = batch_size
         self.eps = eps
         self.eps_dec = eps_dec
         self.min_eps = min_eps
         self.gamma = gamma
+        self.target_update_freq = target_update_freq
 
         self.mem_size = mem_size
         self.mem_counter = 0
