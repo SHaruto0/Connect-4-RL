@@ -7,38 +7,33 @@ import matplotlib.pyplot as plt
 from model import DQN
 
 class Agent:
-    def __init__(self, input_dim, n_action, lr=0.001, batch_size=64, eps=1.0, min_eps=0.01, gamma=0.99, 
-                 fc1_dim=256, fc2_dim=256, fc3_dim=256, mem_size=5000, eps_dec=0.0001, target_update_freq=1000):
+    def __init__(self, input_dim, n_action, lr=0.01, batch_size=100, eps=1.0, min_eps=0.01, gamma=0.99, 
+                 fc1_dim=100, fc2_dim=100, fc3_dim=100, mem_size=10000, eps_dec=0.00005):
         self.lr = lr
         self.batch_size = batch_size
         self.eps = eps
         self.eps_dec = eps_dec
         self.min_eps = min_eps
         self.gamma = gamma
-        self.target_update_freq = target_update_freq
 
         self.mem_size = mem_size
         self.mem_counter = 0
         self.learn_step_counter = 0
         self.action_space = [i for i in range(n_action)]
 
-        # DDQN
         self.Q_eval = DQN(input_dim, fc1_dim, fc2_dim, n_action)
-        self.Q_target = DQN(input_dim, fc1_dim, fc2_dim, n_action)
-        self.Q_target.load_state_dict(self.Q_eval.state_dict())
-        self.Q_target.eval()
 
         self.optimizer = torch.optim.Adam(self.Q_eval.parameters(), lr=self.lr)
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.SmoothL1Loss()
 
         self.state_memory = np.zeros((self.mem_size, input_dim), dtype=np.float32)
         self.next_state_memory = np.zeros((self.mem_size, input_dim), dtype=np.float32)
         self.reward_memory = np.zeros(self.mem_size, dtype=np.float32)
         self.action_memory = np.zeros(self.mem_size, dtype=np.int32)
-        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool)
+        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool_)
 
         self.loss_history = []
-
+        
     def store_memory(self, state, action, reward, terminal, next_state):
         index = self.mem_counter % self.mem_size
 
@@ -64,10 +59,9 @@ class Agent:
 
         return action
 
-
     def learn(self):
         if self.mem_counter < self.batch_size:
-            return
+            return 0.0
         
         self.optimizer.zero_grad()
 
@@ -81,29 +75,20 @@ class Agent:
         terminal_batch = torch.tensor(self.terminal_memory[batch]).to(device=self.Q_eval.device)
         action_batch = self.action_memory[batch]
 
-        q_curr = self.Q_eval(state_batch)[batch_index,action_batch]
-
-        # DDQN
-        with torch.no_grad():
-            # main network selects the best actions for next state
-            next_actions = torch.argmax(self.Q_eval(next_state_batch), dim=1)
-            # target network evaluates them
-            q_next = self.Q_target(next_state_batch)[batch_index, next_actions]
-            q_next[terminal_batch] = 0.0
+        q_curr = self.Q_eval(state_batch)[batch_index, action_batch]
+        q_next = torch.max(self.Q_eval(next_state_batch), dim=1)[0]
+        q_next[terminal_batch] = 0.0
 
         q_target = reward_batch + self.gamma * q_next
 
-        loss = self.criterion(q_curr, q_target).to(self.Q_eval.device)
+        loss = self.criterion(q_curr, q_target)
         self.loss_history.append(loss.item())
         loss.backward()
         self.optimizer.step()
 
-        # Periodically update target network
-        self.learn_step_counter += 1
-        if self.learn_step_counter % self.target_update_freq == 0:
-            self.Q_target.load_state_dict(self.Q_eval.state_dict())
-
         self.eps = self.eps - self.eps_dec if self.eps > self.min_eps else self.min_eps
+
+        return loss.item()
 
     def plot_loss(self, file_path="figs/loss.png"):
         plt.plot(np.arange(len(self.loss_history)), self.loss_history)
