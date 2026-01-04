@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import json
+import os
 
 from model import DQN
 from agent import Agent
@@ -104,7 +105,20 @@ def train(trial, stage_cfg):
 if __name__ == "__main__":
     trial = 2
 
-    manager = CurriculumManager("curriculum_config.json")
+    if not os.path.exists("figs"):
+        os.mkdir("figs")
+    if not os.path.exists(f"figs/{trial}"):
+        os.mkdir(f"figs/{trial}")
+        
+    if not os.path.exists("models"):
+        os.mkdir("models")
+    if not os.path.exists(f"models/{trial}"):
+        os.mkdir(f"models/{trial}")
+
+    print(f"Trial: {trial}")
+
+    # manager = CurriculumManager("curriculum_config.json")
+    manager = CurriculumManager("curriculum_config_mod.json")
 
     for stage_cfg in manager.config:
         train(trial, stage_cfg)
