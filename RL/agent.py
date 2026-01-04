@@ -21,7 +21,13 @@ class Agent:
         self.learn_step_counter = 0
         self.action_space = [i for i in range(n_action)]
 
+        # Main Q-network
         self.Q_eval = DQN(input_dim, fc1_dim, fc2_dim, n_action)
+        
+        # Target Q-network
+        self.Q_target = DQN(input_dim, fc1_dim, fc2_dim, n_action)
+        self.Q_target.load_state_dict(self.Q_eval.state_dict())
+        self.Q_target.eval()  # Set to evaluation mode
 
         self.optimizer = torch.optim.Adam(self.Q_eval.parameters(), lr=self.lr)
         self.criterion = nn.SmoothL1Loss()
@@ -75,17 +81,31 @@ class Agent:
         terminal_batch = torch.tensor(self.terminal_memory[batch]).to(device=self.Q_eval.device)
         action_batch = self.action_memory[batch]
 
+        # Get current Q values
         q_curr = self.Q_eval(state_batch)[batch_index, action_batch]
-        q_next = torch.max(self.Q_eval(next_state_batch), dim=1)[0]
-        q_next[terminal_batch] = 0.0
-
-        q_target = reward_batch + self.gamma * q_next
+        
+        # Get next Q values from TARGET network (key improvement)
+        with torch.no_grad():
+            q_next = torch.max(self.Q_target(next_state_batch), dim=1)[0]
+            q_next[terminal_batch] = 0.0
+            q_target = reward_batch + self.gamma * q_next
 
         loss = self.criterion(q_curr, q_target)
         self.loss_history.append(loss.item())
         loss.backward()
-        self.optimizer.step()
 
+        # Gradient clipping for stability
+        torch.nn.utils.clip_grad_norm_(self.Q_eval.parameters(), max_norm=10.0)
+        
+        self.optimizer.step()
+        self.learn_step_counter += 1
+
+        # Update target network periodically
+        if self.learn_step_counter % self.target_update_freq == 0:
+            self.Q_target.load_state_dict(self.Q_eval.state_dict())
+            print(f"Target network updated at step {self.learn_step_counter}")
+
+        # Decay epsilon
         self.eps = self.eps - self.eps_dec if self.eps > self.min_eps else self.min_eps
 
         return loss.item()
