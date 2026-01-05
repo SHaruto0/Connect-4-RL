@@ -1,0 +1,87 @@
+{
+  "curriculum": [
+    {
+      "stage": 0,
+      "mode": "random",
+      "episodes": 3000,
+      "saveas": "stage0_model.pth"
+    },
+    {
+      "stage": 1,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage1_model.pth",
+      "model_path": "stage0_model.pth"
+    },
+    {
+      "stage": 2,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage2_model.pth",
+      "model_path": "stage1_model.pth"
+    },
+    {
+      "stage": 3,
+      "mode": "random",
+      "episodes": 3000,
+      "saveas": "stage3_model.pth",
+      "model_path": "stage2_model.pth"
+    },
+    {
+      "stage": 4,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage4_model.pth",
+      "model_path": "stage3_model.pth"
+    },
+    {
+      "stage": 5,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage5_model.pth",
+      "model_path": "stage4_model.pth"
+    },
+    {
+      "stage": 6,
+      "mode": "random",
+      "episodes": 3000,
+      "saveas": "stage6_model.pth",
+      "model_path": "stage5_model.pth"
+    },
+    {
+      "stage": 7,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage7_model.pth",
+      "model_path": "stage6_model.pth"
+    },
+    {
+      "stage": 8,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage8_model.pth",
+      "model_path": "stage7_model.pth"
+    },
+    {
+      "stage": 9,
+      "mode": "random",
+      "episodes": 3000,
+      "saveas": "stage9_model.pth",
+      "model_path": "stage8_model.pth"
+    },
+    {
+      "stage": 10,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage10_model.pth",
+      "model_path": "stage9_model.pth"
+    },
+    {
+      "stage": 11,
+      "mode": "selfplay",
+      "episodes": 3000,
+      "saveas": "stage11_model.pth",
+      "model_path": "stage10_model.pth"
+    }
+  ]
+}
