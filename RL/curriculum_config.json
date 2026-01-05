@@ -5,35 +5,31 @@
       "mode": "random",
       "episodes": 10000,
       "win_rate_threshold": 0.8,
-      "saveas": "stage0_model.pth",
-      "description": "Learn basics against random opponent"
+      "saveas": "stage0_model.pth"
     },
     {
       "stage": 1,
       "mode": "selfplay",
       "episodes": 15000,
-      "win_rate_threshold": 0.55,
+      "win_rate_threshold": 0.8,
       "saveas": "stage1_model.pth",
-      "model_path": "stage0_model.pth",
-      "description": "Selfplay against stage 0 model"
+      "model_path": "stage0_model.pth"
     },
     {
       "stage": 2,
       "mode": "selfplay",
       "episodes": 20000,
-      "win_rate_threshold": 0.52,
+      "win_rate_threshold": 0.8,
       "saveas": "stage2_model.pth",
-      "model_path": "stage1_model.pth",
-      "description": "Selfplay against stage 1 model"
+      "model_path": "stage1_model.pth"
     },
     {
       "stage": 3,
       "mode": "selfplay",
       "episodes": 30000,
-      "win_rate_threshold": 0.51,
+      "win_rate_threshold": 0.8,
       "saveas": "final_model.pth",
-      "model_path": "stage2_model.pth",
-      "description": "Final refinement against stage 2 model"
+      "model_path": "stage2_model.pth"
     }
   ]
 }
