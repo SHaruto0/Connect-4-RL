@@ -20,11 +20,12 @@ class Connect4:
             "win": 1,
             "tie": 0.5,
             "loss": -1,
-            "reach": 0.1,
-            "block": 0.1
+            # "reach": 0.2,
+            # "block": 0.2
         }
 
         self.Q_model = agent
+        self.turns = 0
         
     def play(self):
         self.game_on = True
@@ -56,8 +57,8 @@ class Connect4:
             
             if self.current_player == -1 and self.Q_model is not None:
                 with torch.no_grad():
-                    obs = torch.tensor([self.get_board_state()], dtype=torch.float32, device=self.Q_model.device)
-                    q_val = self.Q_model(obs).squeeze(0)  # shape (7,)
+                    obs = torch.tensor([self.get_board_state(-1)], dtype=torch.float32, device=self.Q_model.device)
+                    q_val = self.Q_model(obs).squeeze(0)
 
                     mask = torch.tensor(self.get_non_empty_column(), dtype=torch.bool, device=self.Q_model.device)
                     q_val[~mask] = -float('inf')
@@ -85,6 +86,8 @@ class Connect4:
                     self.game_on = False
 
                 self.current_player *= -1
+        
+        self.print_board()
     
     def step(self, column, ai=True):
         reward = 0
@@ -105,7 +108,7 @@ class Connect4:
 
         elif self.current_player == -1 and self.mode == "selfplay":
             with torch.no_grad():
-                obs = torch.tensor([self.get_board_state()], dtype=torch.float32, device=self.Q_model.device)
+                obs = torch.tensor([self.get_board_state(-1)], dtype=torch.float32, device=self.Q_model.device)
                 q_val = self.Q_model(obs).squeeze(0)  # shape (7,)
 
                 mask = torch.tensor(self.get_non_empty_column(), dtype=torch.bool, device=self.Q_model.device)
@@ -118,49 +121,62 @@ class Connect4:
 
         if column is None:
             print("Invalid move attempted.")
-            return self.get_board_state(), self.rewards["invalid"], True
+            return self.get_board_state(), self.rewards["illegal"], True
 
         # self.print_board()
         result, done = self.check_win(row, column)
         reward = self.rewards[result]
 
-        if not done:
-            result, is_reach = self.check_reach(row, column)
-            reward += self.rewards[result]
+        # if not done:
+        #     result, is_reach, reach_count = self.check_reach(row, column)
+        #     reward += self.rewards[result] * reach_count
+        #     # print(f"Player: {self.current_player} \t {is_reach = }")
 
-            result, is_block = self.check_block(row, column)
-            reward += self.rewards[result]
+        #     result, is_block, block_count = self.check_block(row, column)
+        #     reward += self.rewards[result] * block_count
+        #     # print(f"Player: {self.current_player} \t {is_block = }")
 
         self.current_player *= -1
 
         if not done and ai:
             board, ai_reward, done = self.step(-1, False)
-            reward -= ai_reward
+            # reward -= ai_reward
+            # if ai_reward == 1:
+            #     reward = -1
             return board, reward, done
         else:
-            return self.get_board_state(), reward, done
+            return self.get_board_state(1), reward, done
 
     def reset(self) -> list[int]:
         self.board = np.zeros((6,7), dtype=np.int8)
-        state = self.get_board_state()
 
         self.current_player = np.random.choice([-1,1])
 
         if self.current_player == -1:
             self.step(-1, False)
 
-        return state
+        return self.get_board_state(1)
     
-    def get_board_state(self) -> list[int]:
-        player1_flat = []
-        player2_flat = []
-        
+    def get_board_state(self, player=None) -> list[int]:
+        if player is None:
+            player = self.current_player
+
+        player_flat = []
+        opponent_flat = []
+
         for row in self.board:
             for cell in row:
-                player1_flat.append(1 if cell == 1 else 0)
-                player2_flat.append(1 if cell == -1 else 0)
-        
-        return player1_flat + player2_flat
+                if cell == player:
+                    player_flat.append(1)
+                    opponent_flat.append(0)
+                elif cell == -player:
+                    player_flat.append(0)
+                    opponent_flat.append(1)
+                else:
+                    player_flat.append(0)
+                    opponent_flat.append(0)
+
+        return player_flat + opponent_flat
 
     def place(self, piece: int, cindex: int) -> bool:
         column = self.board[:,cindex]
@@ -225,6 +241,7 @@ class Connect4:
             (1, -1)   # diagonal down-left
         ]
 
+        reach_count = 0
         for dr, dc in directions:
             line = []
             for i in range(-3, 4):
@@ -240,9 +257,11 @@ class Connect4:
                 if None in window:
                     continue
                 if window.count(player) == 3 and window.count(0) == 1:
-                    return "reach", True
+                    reach_count += 1
 
-        return "continue", False
+        if reach_count != 0:
+            return "reach", True, reach_count
+        return "continue", False, 0
 
 
     def check_block(self, row: int, column: int) -> tuple[str, bool]:
@@ -258,6 +277,7 @@ class Connect4:
             (1, -1)   # diagonal down-left
         ]
 
+        block_count = 0
         for dr, dc in directions:
             line = []
             coords = []  # store coordinates for each cell in the line
@@ -280,9 +300,11 @@ class Connect4:
                 if window.count(opponent) == 3 and window.count(player) == 1:
                     empty_index = window.index(player)
                     if positions[empty_index] == (row, column):
-                        return "block", True
+                        block_count += 1
 
-        return "continue", False
+        if block_count != 0:
+            return "block", True, block_count
+        return "continue", False, 0
 
 
     def get_non_empty_column(self) -> list[int]:

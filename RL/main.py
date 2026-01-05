@@ -9,23 +9,37 @@ from agent import Agent
 from Connect4Env import Connect4
 from CurriculumManager import CurriculumManager
 
-def plot_rewards(scores, avg_scores, filename="plots/rewards.png"):
-    plt.figure(figsize=(10, 5))
-    plt.plot(scores, label="Reward", alpha=0.5)
-    plt.plot(avg_scores, label="Moving Average", color="red")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.title("Training Reward Curve")
-    plt.legend()
-    plt.grid(True)
+def plot_rewards(scores, avg_scores, win_rates, filename_prefix="plots/rewards"):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+    
+    # Rewards plot
+    ax1.plot(scores, label="Episode Reward", alpha=0.3, linewidth=0.5)
+    ax1.plot(avg_scores, label="50-Episode Average", color="red", linewidth=2)
+    ax1.set_xlabel("Episode")
+    ax1.set_ylabel("Reward")
+    ax1.set_title("Training Reward Curve")
+    ax1.legend()
+    ax1.grid(True)
+    
+    # Win rate plot
+    ax2.plot(win_rates, label="Win Rate (last 100 games)", color="green", linewidth=2)
+    ax2.axhline(y=0.8, color='r', linestyle='--', label='Target (80%)')
+    ax2.set_xlabel("Episode")
+    ax2.set_ylabel("Win Rate")
+    ax2.set_title("Win Rate Over Time")
+    ax2.legend()
+    ax2.grid(True)
+    ax2.set_ylim([0, 1])
+    
     plt.tight_layout()
-    plt.savefig(filename)
+    plt.savefig(f"{filename_prefix}.png", dpi=150)
     plt.close()
 
 def train(trial, stage_cfg):
     scores = []
     avg_scores = []
     results = []
+    win_rates = []
     iteration = 0
 
     stage = stage_cfg["stage"]
@@ -34,8 +48,8 @@ def train(trial, stage_cfg):
     saveas = stage_cfg["saveas"]
 
     if mode == "selfplay":
-        model_path = f"models/{trial}_{stage_cfg["model_path"]}"
-        past_agent = DQN(input_dim=2*6*7, fc1_dim=256, fc2_dim=256, n_action=7)
+        model_path = f"models/{trial}/{stage_cfg['model_path']}"
+        past_agent = DQN(input_dim=2*6*7, fc1_dim=100, fc2_dim=100, n_action=7)
         past_agent.load_state_dict(torch.load(model_path))
 
         env = Connect4(mode=mode, agent=past_agent)
@@ -48,7 +62,14 @@ def train(trial, stage_cfg):
 
     agent = Agent(input_dim=2*6*7, n_action=7)
 
+    if mode == "selfplay":
+        model_path = f"models/{trial}/{stage_cfg['model_path']}"
+        print(f"Loading previous model from {model_path} into training agent...")
+        agent.load_model(model_path)
+        agent.eps = 1.0
+
     print(f"\nRunning Stage {stage}...")
+    best_win_rate = 0
     while True:
         step = 0
         score = 0
@@ -56,69 +77,108 @@ def train(trial, stage_cfg):
         obs = env.reset()
 
         while not done:
-            # env.print_board()
             action = agent.choose_action(obs, env.get_non_empty_column())
             obs_, reward, done = env.step(action)
-            print(reward)
             score += reward
             agent.store_memory(obs, action, reward, done, obs_)
-            agent.learn()
+            loss = agent.learn()
             obs = obs_
             step += 1
+            
         scores.append(score)
 
+        # Track wins
         if reward == 1:
             results.append(1)
+        elif reward == 0.5:  # tie
+            results.append(0.5)
         else:
             results.append(0)
 
         avg_score = np.mean(scores[-50:])
         avg_scores.append(avg_score)
-
-        if (iteration + 1) % 250 == 0:
-            plot_rewards(scores, avg_scores, f"figs/rewards_{stage}_{trial}.png")
-            agent.plot_loss(f"figs/loss_{stage}_trial_{trial}.png")
-            
-            lower_bound = max(iteration - 2500 + 1, 0)
-            recent_results = results[lower_bound:iteration + 1]
-            win_rate = np.sum(recent_results) / len(recent_results)
-            
-            print(f"Stage: {stage} \t Episode: {iteration+1} \t Average Score: {avg_score} \t Win Rate: {win_rate}")
         
-        if iteration + 1 >= min_episodes:
-            lower = max(0, iteration - 2499)
-            window = results[lower:iteration+1]
-            win_rate = np.sum(window) / len(window)
-            if win_rate >= 0.8:
-                break
+        # Calculate win rate over last 100 games
+        window_size = min(100, len(results))
+        recent_win_rate = np.mean(results[-window_size:])
+        win_rates.append(recent_win_rate)
 
+        if (iteration + 1) % 100 == 0:
+            plot_rewards(scores, avg_scores, win_rates, 
+                        f"figs/{trial}/rewards_{stage}")
+            agent.plot_loss(f"figs/{trial}/loss_{stage}.png")
+            
+            # Calculate win rate over last 500 games for evaluation
+            eval_window = min(500, len(results))
+            eval_win_rate = np.mean(results[-eval_window:])
+            
+            print(f"Stage: {stage} | Episode: {iteration+1:5d} | "
+                  f"Avg Score: {avg_score:6.3f} | "
+                  f"Win Rate (100): {recent_win_rate:.3f} | "
+                  f"Win Rate (500): {eval_win_rate:.3f} | "
+                  f"Epsilon: {agent.eps:.4f} | "
+                  f"Loss: {loss:.4f}")
+            
+            if eval_win_rate > best_win_rate:
+                best_win_rate = eval_win_rate
+                agent.save_model(f"models/{trial}/best_{saveas}")
+        
+        # Check if we've met the criteria
+        if iteration + 1 >= min_episodes:
+            # Need at least 1000 games for reliable win rate
+            if iteration >= 1000:
+                eval_window = 1000
+                long_term_win_rate = np.mean(results[-eval_window:])
+                
+                if long_term_win_rate >= 0.75:  # 75% win rate threshold
+                    print(f"\n✓ Stage {stage} completed! Win rate: {long_term_win_rate:.3f}")
+                    break
+            
         iteration += 1
 
-        if iteration == 1:
+        # Safety limit
+        if iteration >= min_episodes * 3:
+            print(f"\nReached safety limit. Final win rate: {np.mean(results[-500:]):.3f}")
             break
-    
-    # env.print_board()
 
-    agent.save_model(f"models/{trial}_{saveas}")
-    print(f"Finished Stage {stage}. Saved model!!")
+    agent.save_model(f"models/{trial}/{saveas}")
+    
+    # Save training statistics
+    stats = {
+        'final_win_rate': float(np.mean(results[-500:])),
+        'best_win_rate': float(best_win_rate),
+        'total_episodes': iteration + 1,
+        'final_epsilon': float(agent.eps)
+    }
+    
+    with open(f"models/{trial}/stats_{stage}.json", 'w') as f:
+        json.dump(stats, f, indent=2)
+    
+    print(f"Finished Stage {stage}. Model saved!")
+    return stats
 
 if __name__ == "__main__":
-    trial = 2
+    trial = 1
 
-    if not os.path.exists("figs"):
-        os.mkdir("figs")
-    if not os.path.exists(f"figs/{trial}"):
-        os.mkdir(f"figs/{trial}")
-        
-    if not os.path.exists("models"):
-        os.mkdir("models")
-    if not os.path.exists(f"models/{trial}"):
-        os.mkdir(f"models/{trial}")
+    for dirname in ["figs", "models"]:
+        os.makedirs(dirname, exist_ok=True)
+        os.makedirs(f"{dirname}/{trial}", exist_ok=True)
 
     print(f"Trial: {trial}")
+    print(f"Device: {torch.device('cuda' if torch.cuda.is_available() else 'cpu')}")
 
-    # manager = CurriculumManager("curriculum_config.json")
-    manager = CurriculumManager("curriculum_config_mod.json")
+    manager = CurriculumManager("curriculum_config.json")
 
+    all_stats = {}
     for stage_cfg in manager.config:
-        train(trial, stage_cfg)
+        stats = train(trial, stage_cfg)
+        all_stats[f"stage_{stage_cfg['stage']}"] = stats
+    
+    # Save overall statistics
+    with open(f"models/{trial}/all_stats.json", 'w') as f:
+        json.dump(all_stats, f, indent=2)
+    
+    print("Training Complete!")
+    for stage_name, stats in all_stats.items():
+        print(f"{stage_name}: Win Rate = {stats['final_win_rate']:.3f}, "
+              f"Episodes = {stats['total_episodes']}")
